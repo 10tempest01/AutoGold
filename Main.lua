@@ -1,3 +1,4 @@
+local Settings = getgenv().Settings
 if not Settings then warn("Settings not found!") return end
 
 game.Loaded:Wait()
