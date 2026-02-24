@@ -273,7 +273,7 @@ local function SendWebhook(EventType, Title, Fields, Ping)
 end
 
 local function ChooseNextCharacter()
-    local Name = Settings.Characters[1].Name
+    local Name = Settings.Characters[1] and Settings.Characters[1].Name
     if not Name then return end
     table.remove(Settings.Characters, 1)
     getgenv().Chosen = Name
@@ -436,24 +436,33 @@ end)
 task.spawn(function()
     if Player.Name ~= MainAccount then return end
 
-    TotalDamage, TotalPoints = 0, 0
-    local LastDamage,  LastPoints = 0, 0
     SessionStart = tick()
     TotalWinCount = 0
 
     local DamageStat = Player:WaitForChild("leaderstats"):WaitForChild("Damage")
     local PointsStat = Player:WaitForChild("leaderstats"):WaitForChild("Points")
+    TotalDamage, TotalPoints = 0, 0
+    local LastDamage = DamageStat.Value
+    local LastPoints = PointsStat.Value
 
     Connections["DamageTracker"] = DamageStat:GetPropertyChangedSignal("Value"):Connect(function()
         local V = DamageStat.Value
-        if V == 0 then LastDamage = 0; return end
+        if V < LastDamage then
+            LastDamage = V
+            return
+        end
+
         TotalDamage += (V - LastDamage)
         LastDamage = V
     end)
 
     Connections["PointsTracker"] = PointsStat:GetPropertyChangedSignal("Value"):Connect(function()
         local V = PointsStat.Value
-        if V == 0 then LastPoints = 0; return end
+        if V < LastPoints then
+            LastPoints = V
+            return
+        end
+    
         TotalPoints += (V - LastPoints)
         LastPoints = V
     end)
@@ -464,11 +473,11 @@ task.spawn(function()
                 task.wait(Settings.PeriodicUpdateInterval * 60)
                 if Player.Name == MainAccount then
                     SendWebhook("Info", "Periodic Update", {
-                        { Name = "💥 Total Damage",           Value = tostring(TotalDamage) },
-                        { Name = "🔢 Total Points",           Value = tostring(TotalPoints) },
+                        { Name = "💥 Total Damage",     Value = tostring(TotalDamage) },
+                        { Name = "🔢 Total Points",     Value = tostring(TotalPoints) },
                         { Name = "🏆 Total Wins",       Value = tostring(TotalWinCount) },
                         { Name = "🎭 Active Character", Value = getgenv().Chosen or "Unknown" },
-                        { Name = "🔄 Next In Queue",    Value = tostring(Settings.Characters[1].Name or "None") },
+                        { Name = "🔄 Next In Queue",    Value = tostring((Settings.Characters[1] and Settings.Characters[1].Name) or "None") },
                     })
                 end
             end
@@ -497,12 +506,12 @@ task.spawn(function()
             local Chosen = ChooseNextCharacter()
 
             if Chosen then
+                SessionStart = tick()
+                TotalDamage, TotalPoints, TotalWinCount = 0, 0, 0
                 SendWebhook("Char", "Switching Character", {
                     { Name = "🎭 New Character",   Value = Chosen },
                     { Name = "📋 Remaining Queue", Value = tostring(#Settings.Characters) .. " character(s)" },
                 })
-                SessionStart = tick()
-                TotalDamage, TotalPoints, TotalWinCount = 0, 0, 0
             else
                 SendWebhook("Error", "Character Queue Empty", {
                     { Name = "ℹ️ Info", Value = "No characters left in the rotation. Closing clients." },
