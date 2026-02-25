@@ -23,14 +23,20 @@ local PlaceIds = {
     Ranked = 2008032602;
 }
 
+local function DebugPrint(Text)
+    if not Settings.DebugMode then return end
+    return print(("[%s] %s"):format(Player.Name, Text))
+end
+
 local TotalWinCount, TotalDamage, TotalPoints = 0, 0, 0
+local Chosen = nil
 local SessionStart = tick()
 local StartTick = tick()
 local LogsPath = "AutoGold/Logs/"
+local GoldSkinsPath = "AutoGold/GoldSkins.txt"
 
 local function SendWebhook() end
 
--- divine intellect
 local FileBus = {}
 FileBus.__index = FileBus
 
@@ -70,14 +76,14 @@ function FileBus:Send(Channel, Value)
     local Encoded = HttpService:JSONEncode(Packet)
     writefile(Path, Encoded)
 
-    print(("[%s] SENT | Channel: %s | Id: %s"):format(Player.Name, Channel, Packet.Id))
+    DebugPrint(("SENT | Channel: %s | Value: %s | Id: %s"):format(Channel, Value, Packet.Id))
 end
 
 function FileBus:Listen(Channel, Callback)
     local Path = self:GetPath(Channel)
 
     task.spawn(function()
-        --print(("[%s] LISTENING | Channel: %s"):format(Player.Name, Channel))
+        DebugPrint(("LISTENING | Channel: %s"):format(Channel))
 
         while true do
             task.wait(1)
@@ -105,11 +111,7 @@ function FileBus:Listen(Channel, Callback)
 
             self.ProcessedIds[Packet.Id] = true
 
-            print(("[%s] CALLBACK | Channel: %s | Id: %s"):format(
-                Player.Name,
-                Channel,
-                Packet.Id
-            ))
+            DebugPrint(("CALLBACK | Channel: %s | Value: %s | Id: %s"):format(Channel, Packet.Data, Packet.Id))
 
             Callback(Packet.Data, Packet)
         end
@@ -272,12 +274,48 @@ local function SendWebhook(EventType, Title, Fields, Ping)
     })
 end
 
+local function GetGoldSkins()
+    local Data = HttpService:JSONDecode(ReplicatedStorage:WaitForChild("CasualInfo"):InvokeServer("BoughtChars"))
+    local GoldSkins = {}
+    for Char, Info in Data do
+        if Info.Gold then
+            table.insert(GoldSkins, Char)
+        end
+    end
+    return GoldSkins
+end
+
+local function HasGoldSkin(Name)
+    if isfile(GoldSkinsPath) then
+        local GoldSkins = HttpService:JSONDecode(readfile(GoldSkinsPath))
+        for _, Char in GoldSkins do
+            if Name == Char then
+                SendWebhook("Char", "Skipping Character (Gold Skin Already Owned)", {
+                    { Name = "🎭 Skipped Character", Value = Name },
+                    { Name = "📋 Remaining Queue",   Value = tostring(#Settings.Characters) .. " character(s)" },
+                })
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function ChooseNextCharacter()
     local Name = Settings.Characters[1] and Settings.Characters[1].Name
     if not Name then return end
-    table.remove(Settings.Characters, 1)
-    getgenv().Chosen = Name
 
+    if HasGoldSkin(Name) then
+        table.remove(Settings.Characters, 1)
+        DebugPrint("Skipping", Name)
+        DebugPrint(HttpService:JSONEncode(Settings.Characters))
+        return ChooseNextCharacter()
+    end
+
+    table.remove(Settings.Characters, 1)
+    Chosen = Name
+
+    DebugPrint("Switching to", Name)
     local Traits = Player.Backpack.ServerTraits
     Traits.Choose:FireServer(Name)
     task.wait(0.1)
@@ -390,7 +428,7 @@ end
 local Teleporting = false
 Player.OnTeleport:Connect(function(State)
     if State.Name == "InProgress" then
-        --print("Teleport InProgress detected")
+        DebugPrint("Teleport InProgress detected")
         Teleporting = true
     end
 end)
@@ -400,11 +438,11 @@ task.spawn(function()
     local ConnectionDone
     Connections["DisconnectWatcher"] = CoreGui.DescendantAdded:Connect(function(Descendant)
         if Descendant.Name == "ErrorPrompt" and CoreGui:FindFirstChild("RobloxPromptGui") and Descendant:IsDescendantOf(CoreGui.RobloxPromptGui) then
-            --print("Connection found ErrorPrompt", Descendant.Visible)
+            DebugPrint("Connection found ErrorPrompt", Descendant.Visible)
             ConnectionDone = true
             Descendant:GetPropertyChangedSignal("Visible"):Connect(function()
                 if Teleporting then
-                    --print("Teleport detected in check")
+                    DebugPrint("Teleport detected in check")
                     Teleporting = false
                     return
                 end
@@ -441,7 +479,8 @@ task.spawn(function()
 
     local DamageStat = Player:WaitForChild("leaderstats"):WaitForChild("Damage")
     local PointsStat = Player:WaitForChild("leaderstats"):WaitForChild("Points")
-    TotalDamage, TotalPoints = 0, 0
+    TotalDamage = DamageStat.Value
+    TotalPoints = PointsStat.Value
     local LastDamage = DamageStat.Value
     local LastPoints = PointsStat.Value
 
@@ -454,6 +493,7 @@ task.spawn(function()
 
         TotalDamage += (V - LastDamage)
         LastDamage = V
+        task.wait() -- WILL NOT work without this and idk why
     end)
 
     Connections["PointsTracker"] = PointsStat:GetPropertyChangedSignal("Value"):Connect(function()
@@ -465,6 +505,7 @@ task.spawn(function()
     
         TotalPoints += (V - LastPoints)
         LastPoints = V
+        task.wait() -- WILL NOT work without this and idk why
     end)
 
     if Settings.PeriodicUpdateInterval > 0 then
@@ -476,7 +517,7 @@ task.spawn(function()
                         { Name = "💥 Total Damage",     Value = tostring(TotalDamage) },
                         { Name = "🔢 Total Points",     Value = tostring(TotalPoints) },
                         { Name = "🏆 Total Wins",       Value = tostring(TotalWinCount) },
-                        { Name = "🎭 Active Character", Value = getgenv().Chosen or "Unknown" },
+                        { Name = "🎭 Active Character", Value = Chosen or "Unknown" },
                         { Name = "🔄 Next In Queue",    Value = tostring((Settings.Characters[1] and Settings.Characters[1].Name) or "None") },
                     })
                 end
@@ -489,7 +530,7 @@ task.spawn(function()
 
         task.spawn(function()
             SendWebhook("Gold", "Gold Skin Unlocked", {
-                { Name = "🎭 Character",                 Value = getgenv().Chosen or "Unknown" },
+                { Name = "🎭 Character",                 Value = Chosen or "Unknown" },
                 { Name = "⏱️ Time on Character",         Value = FormatTime(tick() - SessionStart) },
                 { Name = "💥 Total Damage",              Value = tostring(TotalDamage) },
                 { Name = "🔢 Total Points",              Value = tostring(TotalPoints) },
@@ -503,7 +544,7 @@ task.spawn(function()
             repeat task.wait() until PlayerGui:FindFirstChild("CharacterSelect", true) and PlayerGui:FindFirstChild("CharacterSelect", true).Visible
             task.wait(3)
 
-            local Chosen = ChooseNextCharacter()
+            Chosen = ChooseNextCharacter()
 
             if Chosen then
                 SessionStart = tick()
@@ -517,6 +558,7 @@ task.spawn(function()
                     { Name = "ℹ️ Info", Value = "No characters left in the rotation. Closing clients." },
                 }, true)
                 task.wait(1)
+                DebugPrint("Finished")
                 Bus:Send("ShouldShutdown", "Yes")
             end
         end)
@@ -531,7 +573,7 @@ Connections["GuiHandler"] = PlayerGui.ChildAdded:Connect(function(Child)
         Remote:FireServer("pass")
 
     elseif Child.Name == "MapBan" then
-        task.wait(0.5)
+        repeat task.wait() until Child:FindFirstChild("Frame") and Child.Frame:FindFirstChild("Maps")
         for _, V in Child.Frame.Maps:GetChildren() do
             if V:FindFirstChild("Title") then
                 ReplicatedStorage.MapBanner:FireServer(V.Title.Text)
@@ -559,12 +601,14 @@ if TeleportData ~= nil then
                 Bus:Listen("Pad", function(Value)
                     TargetLobby = workspace.CasualLobbies:WaitForChild(Value)
                 end)
+            else
+                local GoldSkins = HttpService:JSONEncode(GetGoldSkins())
+                writefile(GoldSkinsPath, GoldSkins)
             end
 
             local Tally
             repeat
                 Tally = TallyAccounts()
-                --print(Tally)
                 task.wait()
             until Tally[1] == true
 
@@ -581,10 +625,10 @@ if TeleportData ~= nil then
                     task.wait()
                 until TargetLobby
                 Bus:Send("Pad", TargetLobby.Name)
-                --print("Got", TargetLobby, Player.Name)
+                DebugPrint("Got", TargetLobby, Player.Name)
             else
                 repeat task.wait() until TargetLobby
-                --print("Got", TargetLobby, Player.Name)
+                DebugPrint("Got", TargetLobby, Player.Name)
             end
             
             repeat task.wait() until Player.Character and Player.Character:FindFirstChild("Humanoid")
@@ -601,7 +645,7 @@ if TeleportData ~= nil then
                 while task.wait(0.5) do
                     for _, Brick in TargetLobby:GetDescendants() do
                         if Brick.Name == "TouchBrick" then
-                            --print("Walking to", Brick.Name)
+                            DebugPrint("Walking to", Brick.Name)
                             Hum.WalkToPart = Brick
                             Hum.WalkToPoint = Vector3.new(0, 0, 0)
                             task.wait(0.5)
@@ -612,7 +656,7 @@ if TeleportData ~= nil then
                 while task.wait(0.1) do
                     for _, TouchInterest in TargetLobby:GetDescendants() do
                         if TouchInterest:IsA("TouchTransmitter") then
-                            --print(TouchInterest.Name, TouchInterest.Parent.Name)
+                            DebugPrint(TouchInterest.Name, TouchInterest.Parent.Name)
                             firetouchinterest(TouchInterest.Parent, Char.Head, 0)
                             task.wait()
                             firetouchinterest(TouchInterest.Parent, Char.Head, 1)
@@ -683,16 +727,21 @@ if TeleportData ~= nil then
                 if CharacterName ~= Settings.Characters[1].Name then
                     ChooseNextCharacter()
                     SendWebhook("Char", "Switching Character", {
-                        { Name = "🎭 New Character",   Value = getgenv().Chosen },
+                        { Name = "🎭 New Character",   Value = Chosen },
                         { Name = "📋 Remaining Queue", Value = tostring(#Settings.Characters) .. " character(s)" },
                     })
                 else
-                    getgenv().Chosen = Settings.Characters[1].Name
-                    table.remove(Settings.Characters, 1)
-                    SendWebhook("Char", "Keeping Character", {
-                        { Name = "🎭 Current Character", Value = getgenv().Chosen },
-                        { Name = "📋 Remaining Queue",   Value = tostring(#Settings.Characters) .. " character(s)" },
-                    })
+                    Chosen = Settings.Characters[1].Name
+                    if HasGoldSkin(Chosen) then
+                        Chosen = ChooseNextCharacter()
+                        DebugPrint("11111111 hellooo pls print")
+                    else
+                        table.remove(Settings.Characters, 1)
+                        SendWebhook("Char", "Keeping Character", {
+                            { Name = "🎭 Current Character", Value = Chosen },
+                            { Name = "📋 Remaining Queue",   Value = tostring(#Settings.Characters) .. " character(s)" },
+                        })
+                    end
                 end
             end)
 
@@ -740,7 +789,7 @@ if TeleportData ~= nil then
                         TotalWinCount += 1
                         UpdateLogFile()
                         SendWebhook("Win", "Match Won", {
-                            { Name = "🎭 Character",           Value = getgenv().Chosen or "Unknown" },
+                            { Name = "🎭 Character",           Value = Chosen or "Unknown" },
                             { Name = "⏱️ Time on Character",   Value = FormatTime(tick() - SessionStart) },
                             { Name = "🏆 Total Wins",          Value = tostring(TotalWinCount) },
                             { Name = "💥 Damage",              Value = ("%s (%s)"):format(tostring(Player.leaderstats.Damage.Value), TotalDamage) },
@@ -811,7 +860,7 @@ if TeleportData ~= nil then
                             end
 
                             for _, Key in ipairs(Settings.MoveKeys) do
-                                local Entry = getgenv().Chosen and GetCharacterEntryByName(getgenv().Chosen)
+                                local Entry = Chosen and GetCharacterEntryByName(Chosen)
 
                                 if not (Entry and Entry.Blacklist and table.find(Entry.Blacklist, Key)) then
                                     VirtualInput:SendKeyEvent(true, Key, false, game)
