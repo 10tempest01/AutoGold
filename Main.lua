@@ -277,11 +277,14 @@ end
 local function GetGoldSkins()
     local Data = HttpService:JSONDecode(ReplicatedStorage:WaitForChild("CasualInfo"):InvokeServer("BoughtChars"))
     local GoldSkins = {}
+
     for Char, Info in Data do
         if Info.Gold then
             table.insert(GoldSkins, Char)
         end
     end
+
+    DebugPrint(HttpService:JSONEncode(GoldSkins))
     return GoldSkins
 end
 
@@ -290,7 +293,7 @@ local function HasGoldSkin(Name)
         local GoldSkins = HttpService:JSONDecode(readfile(GoldSkinsPath))
         for _, Char in GoldSkins do
             if Name == Char then
-                SendWebhook("Char", "Skipping Character (Gold Skin Already Owned)", {
+                task.spawn(SendWebhook, "Char", "Skipping Character (Gold Skin Already Owned)", {
                     { Name = "🎭 Skipped Character", Value = Name },
                     { Name = "📋 Remaining Queue",   Value = tostring(#Settings.Characters) .. " character(s)" },
                 })
