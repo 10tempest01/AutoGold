@@ -23,9 +23,9 @@ local PlaceIds = {
     Ranked = 2008032602;
 }
 
-local function DebugPrint(Text)
+local function DebugPrint(...)
     if not Settings.DebugMode then return end
-    return print(("[%s] %s"):format(Player.Name, Text))
+    print(("[%s]"):format(Player.Name), ...)
 end
 
 local TotalWinCount, TotalDamage, TotalPoints = 0, 0, 0
@@ -858,9 +858,7 @@ if TeleportData ~= nil then
                     repeat
                         task.spawn(function()
 
-                            if not Settings.SpamMoves then
-                                return
-                            end
+                            if not Settings.SpamMoves then return end
 
                             for _, Key in ipairs(Settings.MoveKeys) do
                                 local Entry = Chosen and GetCharacterEntryByName(Chosen)
