@@ -78,4 +78,5 @@ getgenv().Settings = {
     };
 }
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/10tempest01/AutoGold/refs/heads/main/Main.lua"))()```
+loadstring(game:HttpGet("https://raw.githubusercontent.com/10tempest01/AutoGold/refs/heads/main/Main.lua"))()
+```
