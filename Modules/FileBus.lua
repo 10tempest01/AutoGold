@@ -7,6 +7,7 @@ end
 local FileBus = {}
 FileBus.__index = FileBus
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
 
