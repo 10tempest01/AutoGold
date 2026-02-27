@@ -1,14 +1,17 @@
+-- Init
 local Settings = getgenv().Settings
 if not Settings then warn("Settings not found!") return end
 
 game.Loaded:Wait()
 
+-- Variables
 local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local VirtualInput = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
@@ -16,17 +19,8 @@ local HttpService = game:GetService("HttpService")
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
 local MainAccount = Settings.Accounts[1]
+local IsMainAccount = Player.Name == MainAccount
 local Request = request or (http and http.request) or http_request
-
-local PlaceIds = {
-    Game = 1458767429;
-    Ranked = 2008032602;
-}
-
-local function DebugPrint(...)
-    if not Settings.DebugMode then return end
-    print(("[%s]"):format(Player.Name), ...)
-end
 
 local TotalWinCount, TotalDamage, TotalPoints = 0, 0, 0
 local Chosen = nil
@@ -35,175 +29,17 @@ local StartTick = tick()
 local LogsPath = "AutoGold/Logs/"
 local GoldSkinsPath = "AutoGold/GoldSkins.txt"
 
-local function SendWebhook() end
-
-local FileBus = {}
-FileBus.__index = FileBus
-
-function FileBus.New(BaseFolder)
-    if not isfolder(BaseFolder) then
-        makefolder(BaseFolder)
-    end
-
-    return setmetatable({
-        BaseFolder = BaseFolder,
-        Listeners = {},
-        ProcessedIds = {}
-    }, FileBus)
-end
-
-function FileBus:GetPath(Channel)
-    assert(self.BaseFolder, "FileBus not constructed properly.")
-    assert(Channel, "Channel cannot be nil.")
-
-    return self.BaseFolder .. "/" .. Channel .. ".txt"
-end
-
-function FileBus:InitChannel(Channel)
-    local Path = self:GetPath(Channel)
-    writefile(Path, "")
-end
-
-function FileBus:Send(Channel, Value)
-    local Path = self:GetPath(Channel)
-
-    local Packet = {
-        Id = HttpService:GenerateGUID(false),
-        Timestamp = os.clock(),
-        Data = Value
-    }
-
-    local Encoded = HttpService:JSONEncode(Packet)
-    writefile(Path, Encoded)
-
-    DebugPrint(("SENT | Channel: %s | Value: %s | Id: %s"):format(Channel, Value, Packet.Id))
-end
-
-function FileBus:Listen(Channel, Callback)
-    local Path = self:GetPath(Channel)
-
-    task.spawn(function()
-        DebugPrint(("LISTENING | Channel: %s"):format(Channel))
-
-        while true do
-            task.wait(1)
-
-            if not isfile(Path) then
-                continue
-            end
-
-            local Raw = readfile(Path)
-            if Raw == "" then
-                continue
-            end
-
-            local Success, Packet = pcall(function()
-                return HttpService:JSONDecode(Raw)
-            end)
-
-            if not Success or not Packet or not Packet.Id then
-                continue
-            end
-
-            if self.ProcessedIds[Packet.Id] then
-                continue
-            end
-
-            self.ProcessedIds[Packet.Id] = true
-
-            DebugPrint(("CALLBACK | Channel: %s | Value: %s | Id: %s"):format(Channel, Packet.Data, Packet.Id))
-
-            Callback(Packet.Data, Packet)
-        end
-    end)
-end
-
-getgenv().Bus = FileBus.New("AutoGold")
+-- Tables
+local PlaceIds = {
+    Game = 1458767429;
+    Ranked = 2008032602;
+}
 
 local Channels = {
     "ShouldRejoin";
     "ShouldShutdown";
     "Pad";
 }
-
-for _, Channel in Channels do
-    Bus:InitChannel(Channel)
-end
-
-Bus:Listen("ShouldRejoin", function(Value)
-    if Value ~= "Yes" then
-        return
-    end
-
-    SendWebhook("Teleport", "Teleporting to Ranked", {
-        { Name = "👤 Account", Value = "||" .. Player.Name .. "||", Custom = true },
-    })
-
-    while true do
-        TeleportService:Teleport(PlaceIds.Ranked)
-        task.wait(1)
-    end
-end)
-
-Bus:Listen("ShouldShutdown", function(Value)
-    if Value ~= "Yes" then
-        return
-    end
-
-    SendWebhook("Error", "Shutting Down Client", {
-        { Name = "👤 Account", Value = "||" .. Player.Name .. "||", Custom = true },
-    })
-
-    task.wait(1)
-    game:Shutdown()
-end)
-
-if Connections then
-    for _, Connection in Connections do
-        Connection:Disconnect()
-    end
-end
-
-local function DeepCopy(Original)
-	local Copy = {}
-	for k, v in pairs(Original) do
-		if type(v) == "table" then
-			v = DeepCopy(v)
-		end
-		Copy[k] = v
-	end
-	return Copy
-end
-
-getgenv().Connections = {}
-getgenv().CharactersCopy = DeepCopy(Settings.Characters)
-
-local function FormatTime(Seconds)
-    Seconds = math.floor(Seconds)
-    local Hours = math.floor(Seconds / 3600)
-    local Minutes = math.floor((Seconds % 3600) / 60)
-    local Secs = Seconds % 60
-
-    if Hours > 0 then
-        return string.format("%dh %dm %ds", Hours, Minutes, Secs)
-    elseif Minutes > 0 then
-        return string.format("%dm %ds", Minutes, Secs)
-    else
-        return string.format("%ds", Secs)
-    end
-end
-
-local function UpdateLogFile()
-    local Elapsed = tick() - StartTick
-    local FileName = LogsPath .. os.date("%Y-%m-%d") .. tostring(StartTick) .. ".txt"
-    local Entry = tostring(TotalWinCount) .. " Wins | " .. FormatTime(Elapsed)
-
-    if isfile(FileName) then
-        writefile(FileName, readfile(FileName) .. "\n" .. Entry)
-    else
-        writefile(FileName, Entry)
-    end
-end
 
 local EmbedColors = {
     Start = 0x5865F2;
@@ -225,6 +61,38 @@ local EmbedIcons = {
     Error = "❌";
 }
 
+-- Functions
+local function DebugPrint(...)
+    if not Settings.DebugMode then return end
+    print(("[%s]"):format(Player.Name), ...)
+end
+
+local function DeepCopy(Original)
+	local Copy = {}
+	for k, v in pairs(Original) do
+		if type(v) == "table" then
+			v = DeepCopy(v)
+		end
+		Copy[k] = v
+	end
+	return Copy
+end
+
+local function FormatTime(Seconds)
+    Seconds = math.floor(Seconds)
+    local Hours = math.floor(Seconds / 3600)
+    local Minutes = math.floor((Seconds % 3600) / 60)
+    local Secs = Seconds % 60
+
+    if Hours > 0 then
+        return string.format("%dh %dm %ds", Hours, Minutes, Secs)
+    elseif Minutes > 0 then
+        return string.format("%dm %ds", Minutes, Secs)
+    else
+        return string.format("%ds", Secs)
+    end
+end
+
 local function SendWebhook(EventType, Title, Fields, Ping)
     if not Settings.Webhook then return end
     local Color = EmbedColors[EventType] or EmbedColors.Info
@@ -245,12 +113,12 @@ local function SendWebhook(EventType, Title, Fields, Ping)
         inline = false;
     })
 
-    local PingContent = nil
+    local PingContent
     if Ping and Settings.DiscordId then
         PingContent = "<@" .. Settings.DiscordId .. ">"
     end
 
-    Request({
+    task.spawn(Request, {
         Url = Settings.Webhook,
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
@@ -274,12 +142,25 @@ local function SendWebhook(EventType, Title, Fields, Ping)
     })
 end
 
+local function UpdateLogFile()
+    local Elapsed = tick() - StartTick
+    local FileName = LogsPath .. os.date("%Y-%m-%d") .. tostring(StartTick) .. ".txt"
+    local Entry = tostring(TotalWinCount) .. " Wins | " .. FormatTime(Elapsed)
+
+    if isfile(FileName) then
+        writefile(FileName, readfile(FileName) .. "\n" .. Entry)
+    else
+        writefile(FileName, Entry)
+    end
+end
+
 local function GetGoldSkins()
-    local Data = HttpService:JSONDecode(ReplicatedStorage:WaitForChild("CasualInfo"):InvokeServer("BoughtChars"))
+    local CasualInfo = ReplicatedStorage:WaitForChild("CasualInfo")
+    local Data = HttpService:JSONDecode(CasualInfo:InvokeServer("BoughtChars"))
     local GoldSkins = {}
 
     for Char, Info in Data do
-        if Info.Gold then
+        if Info and Info.Gold then
             table.insert(GoldSkins, Char)
         end
     end
@@ -428,8 +309,51 @@ local function FindEmptyLobby(LobbyType)
     return nil
 end
 
+-- FileBus
+local FileBus = loadstring(game:HttpGet("https://raw.githubusercontent.com/10tempest01/AutoGold/refs/heads/main/Modules/FileBus.lua"))()
+getgenv().Bus = FileBus.New("AutoGold")
+
+for _, Channel in Channels do
+    Bus:InitChannel(Channel)
+end
+
+Bus:Listen("ShouldRejoin", function(Value)
+    if Value ~= "Yes" then return end
+
+    SendWebhook("Teleport", "Teleporting to Ranked", {
+        { Name = "👤 Account", Value = "||" .. Player.Name .. "||", Custom = true },
+    })
+
+    while true do
+        TeleportService:Teleport(PlaceIds.Ranked)
+        task.wait(1)
+    end
+end)
+
+Bus:Listen("ShouldShutdown", function(Value)
+    if Value ~= "Yes" then return end
+
+    SendWebhook("Error", "Shutting Down Client", {
+        { Name = "👤 Account", Value = "||" .. Player.Name .. "||", Custom = true },
+    })
+
+    task.wait(1)
+    game:Shutdown()
+end)
+
+-- Anything after this line is pure slop idk how to organize this shit
+
+if Connections then
+    for _, Connection in Connections do
+        Connection:Disconnect()
+    end
+end
+
+getgenv().Connections = {}
+getgenv().CharactersCopy = DeepCopy(Settings.Characters)
+
 local Teleporting = false
-Player.OnTeleport:Connect(function(State)
+Connections["PlayerTeleport"] = Player.OnTeleport:Connect(function(State)
     if State.Name == "InProgress" then
         DebugPrint("Teleport InProgress detected")
         Teleporting = true
@@ -443,6 +367,7 @@ task.spawn(function()
         if Descendant.Name == "ErrorPrompt" and CoreGui:FindFirstChild("RobloxPromptGui") and Descendant:IsDescendantOf(CoreGui.RobloxPromptGui) then
             DebugPrint("Connection found ErrorPrompt", Descendant.Visible)
             ConnectionDone = true
+
             Descendant:GetPropertyChangedSignal("Visible"):Connect(function()
                 if Teleporting then
                     DebugPrint("Teleport detected in check")
@@ -460,22 +385,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local VU = game:GetService("VirtualUser")
-    Player.Idled:Connect(function()
-        VU:CaptureController()
-        VU:ClickButton2(Vector2.new())
-    end)
-end)
-
-task.spawn(function()
-    if not game:IsLoaded() then game.Loaded:Wait() end
-    for _, C in getconnections(Player.Idled) do
-        C:Disable()
-    end
-end)
-
-task.spawn(function()
-    if Player.Name ~= MainAccount then return end
+    if not IsMainAccount then return end
 
     SessionStart = tick()
     TotalWinCount = 0
@@ -511,56 +421,53 @@ task.spawn(function()
         task.spawn(function()
             while true do
                 task.wait(Settings.PeriodicUpdateInterval * 60)
-                if Player.Name == MainAccount then
-                    SendWebhook("Info", "Periodic Update", {
-                        { Name = "💥 Total Damage",     Value = tostring(TotalDamage) },
-                        { Name = "🔢 Total Points",     Value = tostring(TotalPoints) },
-                        { Name = "🏆 Total Wins",       Value = tostring(TotalWinCount) },
-                        { Name = "🎭 Active Character", Value = Chosen or "Unknown" },
-                        { Name = "🔄 Next In Queue",    Value = tostring((Settings.Characters[1] and Settings.Characters[1].Name) or "None") },
-                    })
-                end
+                SendWebhook("Info", "Periodic Update", {
+                    { Name = "💥 Total Damage",     Value = tostring(TotalDamage) },
+                    { Name = "🔢 Total Points",     Value = tostring(TotalPoints) },
+                    { Name = "🏆 Total Wins",       Value = tostring(TotalWinCount) },
+                    { Name = "🎭 Active Character", Value = Chosen or "Unknown" },
+                    { Name = "🔄 Next In Queue",    Value = tostring((Settings.Characters[1] and Settings.Characters[1].Name) or "None") },
+                })
             end
         end)
     end
 
     Connections["GoldSkinWatcher"] = PlayerGui.DescendantAdded:Connect(function(Ui)
+        task.wait()
         if not Ui:IsA("TextLabel") or not IsGoldLabel(Ui) then return end
+        DebugPrint(Ui:GetFullName())
 
-        task.spawn(function()
-            SendWebhook("Gold", "Gold Skin Unlocked", {
-                { Name = "🎭 Character",                 Value = Chosen or "Unknown" },
-                { Name = "⏱️ Time on Character",         Value = FormatTime(tick() - SessionStart) },
-                { Name = "💥 Total Damage",              Value = tostring(TotalDamage) },
-                { Name = "🔢 Total Points",              Value = tostring(TotalPoints) },
-                { Name = "🏆 Total Wins",                Value = tostring(TotalWinCount) },
-                { Name = "🕐 Time Since Last Gold Skin", Value = (getgenv().LastGoldTime and FormatTime(tick() - getgenv().LastGoldTime)) or "First Gold Skin" },
+        SendWebhook("Gold", "Gold Skin Unlocked", {
+            { Name = "🎭 Character",                 Value = Chosen or "Unknown" },
+            { Name = "⏱️ Time on Character",         Value = FormatTime(tick() - SessionStart) },
+            { Name = "💥 Total Damage",              Value = tostring(TotalDamage) },
+            { Name = "🔢 Total Points",              Value = tostring(TotalPoints) },
+            { Name = "🏆 Total Wins",                Value = tostring(TotalWinCount) },
+            { Name = "🕐 Time Since Last Gold Skin", Value = (getgenv().LastGoldTime and FormatTime(tick() - getgenv().LastGoldTime)) or "First Gold Skin" },
+        }, true)
+        getgenv().LastGoldTime = tick()
+
+        repeat task.wait() until PointsStat.Value == 0
+        repeat task.wait() until PlayerGui:FindFirstChild("CharacterSelect", true) and PlayerGui:FindFirstChild("CharacterSelect", true).Visible
+        task.wait(2)
+
+        Chosen = ChooseNextCharacter()
+
+        if Chosen then
+            SessionStart = tick()
+            TotalDamage, TotalPoints, TotalWinCount = 0, 0, 0
+            SendWebhook("Char", "Switching Character", {
+                { Name = "🎭 New Character",   Value = Chosen },
+                { Name = "📋 Remaining Queue", Value = tostring(#Settings.Characters) .. " character(s)" },
+            })
+        else
+            SendWebhook("Error", "Character Queue Empty", {
+                { Name = "ℹ️ Info", Value = "No characters left in the rotation (or something broke). Closing clients." },
             }, true)
-            getgenv().LastGoldTime = tick()
-
-            repeat task.wait() until PointsStat.Value == 0
-            task.wait(3)
-            repeat task.wait() until PlayerGui:FindFirstChild("CharacterSelect", true) and PlayerGui:FindFirstChild("CharacterSelect", true).Visible
-            task.wait(3)
-
-            Chosen = ChooseNextCharacter()
-
-            if Chosen then
-                SessionStart = tick()
-                TotalDamage, TotalPoints, TotalWinCount = 0, 0, 0
-                SendWebhook("Char", "Switching Character", {
-                    { Name = "🎭 New Character",   Value = Chosen },
-                    { Name = "📋 Remaining Queue", Value = tostring(#Settings.Characters) .. " character(s)" },
-                })
-            else
-                SendWebhook("Error", "Character Queue Empty", {
-                    { Name = "ℹ️ Info", Value = "No characters left in the rotation. Closing clients." },
-                }, true)
-                task.wait(1)
-                DebugPrint("Finished")
-                Bus:Send("ShouldShutdown", "Yes")
-            end
-        end)
+            task.wait(1)
+            DebugPrint("Finished")
+            Bus:Send("ShouldShutdown", "Yes")
+        end
     end)
 end)
 
@@ -592,11 +499,10 @@ local CasualEnterEvent = IsRankedLobby and ReplicatedStorage:WaitForChild("Input
 
 if TeleportData ~= nil then
     if #TeleportData == 0 then
-
         if IsRankedLobby then
             local TargetLobby
 
-            if Player.Name ~= MainAccount then
+            if not IsMainAccount then
                 Bus:Listen("Pad", function(Value)
                     TargetLobby = workspace.CasualLobbies:WaitForChild(Value)
                 end)
@@ -618,7 +524,7 @@ if TeleportData ~= nil then
 
             local LobbyType = tostring(AccountCount / 2) .. "s"
 
-            if Player.Name == MainAccount then
+            if IsMainAccount then
                 repeat
                     TargetLobby = FindEmptyLobby(LobbyType)
                     task.wait()
@@ -665,7 +571,7 @@ if TeleportData ~= nil then
             end
 
         elseif IsMainGame then
-            if Player.Name == MainAccount then
+            if IsMainAccount then
                 SendWebhook("Start", "AutoGold Started", {
                     { Name = "👤 Account",         Value = "||" .. Player.Name .. "||", Custom = true },
                     { Name = "🎭 First Character", Value = Settings.Characters[1].Name or "Unknown" },
@@ -699,7 +605,7 @@ if TeleportData ~= nil then
             end
 
             task.spawn(function()
-                if Player.Name ~= MainAccount then return end
+                if not IsMainAccount then return end
 
                 if Settings.AntiDowntilt and hookmetamethod then
                     local Hook; Hook = hookmetamethod(game, "__namecall", newcclosure(function(...)
@@ -784,7 +690,7 @@ if TeleportData ~= nil then
 
             Connections["RematchAdded"] = PlayerGui.ChildAdded:Connect(function(Child)
                 if Child.Name == "Rematch" then
-                    if Player.Name == MainAccount then
+                    if IsMainAccount then
                         TotalWinCount += 1
                         UpdateLogFile()
                         SendWebhook("Win", "Match Won", {
@@ -803,7 +709,7 @@ if TeleportData ~= nil then
             Connections["CharacterSpawn"] = Player.CharacterAdded:Connect(function(Char)
                 local SpawnReady = false
 
-                if Player.Name ~= MainAccount
+                if not IsMainAccount
                 and Players:FindFirstChild(MainAccount)
                 and Player.Team ~= Players[MainAccount].Team then
                     repeat
@@ -833,8 +739,7 @@ if TeleportData ~= nil then
                             task.wait()
                         until DeathSnapshot ~= Deaths.Value
                     end
-
-                elseif Player.Name == MainAccount then
+                elseif IsMainAccount then
                     repeat
                         SpawnReady = CanSpawnIn()
                         task.wait()
