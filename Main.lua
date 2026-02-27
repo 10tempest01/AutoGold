@@ -482,8 +482,6 @@ task.spawn(function()
 
     local DamageStat = Player:WaitForChild("leaderstats"):WaitForChild("Damage")
     local PointsStat = Player:WaitForChild("leaderstats"):WaitForChild("Points")
-    TotalDamage = DamageStat.Value
-    TotalPoints = PointsStat.Value
     local LastDamage = DamageStat.Value
     local LastPoints = PointsStat.Value
 
@@ -496,7 +494,6 @@ task.spawn(function()
 
         TotalDamage += (V - LastDamage)
         LastDamage = V
-        task.wait() -- WILL NOT work without this and idk why
     end)
 
     Connections["PointsTracker"] = PointsStat:GetPropertyChangedSignal("Value"):Connect(function()
@@ -508,7 +505,6 @@ task.spawn(function()
     
         TotalPoints += (V - LastPoints)
         LastPoints = V
-        task.wait() -- WILL NOT work without this and idk why
     end)
 
     if Settings.PeriodicUpdateInterval > 0 then
