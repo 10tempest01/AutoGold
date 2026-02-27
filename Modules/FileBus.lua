@@ -7,6 +7,9 @@ end
 local FileBus = {}
 FileBus.__index = FileBus
 
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+
 local function DebugPrint(...)
     if not Settings.DebugMode then return end
     print(("[%s]"):format(Player.Name), ...)
