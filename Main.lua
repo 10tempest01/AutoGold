@@ -9,12 +9,12 @@ local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local VirtualInput = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
@@ -352,37 +352,41 @@ end
 getgenv().Connections = {}
 getgenv().CharactersCopy = DeepCopy(Settings.Characters)
 
-local Teleporting = false
-Connections["PlayerTeleport"] = Player.OnTeleport:Connect(function(State)
-    if State.Name == "InProgress" then
-        DebugPrint("Teleport InProgress detected")
-        Teleporting = true
-    end
-end)
-
-task.spawn(function()
-    if not Settings.DisconnectDetection then return end
-    local ConnectionDone
-    Connections["DisconnectWatcher"] = CoreGui.DescendantAdded:Connect(function(Descendant)
-        if Descendant.Name == "ErrorPrompt" and CoreGui:FindFirstChild("RobloxPromptGui") and Descendant:IsDescendantOf(CoreGui.RobloxPromptGui) then
-            DebugPrint("Connection found ErrorPrompt", Descendant.Visible)
-            ConnectionDone = true
-
-            Descendant:GetPropertyChangedSignal("Visible"):Connect(function()
-                if Teleporting then
-                    DebugPrint("Teleport detected in check")
-                    Teleporting = false
-                    return
-                end
-                SendWebhook("Error", "Disconnected", {
-                    { Name = "👤 Account",  Value = "||" .. Player.Name .. "||", Custom = true },
-                    { Name = "ℹ️ Info", Value = "Disconnect detected. Rejoin in progress." },
-                }, true)
-                Bus:Send("ShouldRejoin", "Yes")
-            end)
+if Settings.DisconnectDetection then
+    local Teleporting = false
+    Connections["PlayerTeleport"] = Player.OnTeleport:Connect(function(State)
+        if State.Name == "InProgress" then
+            DebugPrint("Teleport InProgress detected")
+            Teleporting = true
         end
     end)
-end)
+
+    Connections["DisconnectWatcher"] = RunService.RenderStepped:Connect(function()
+        local ErrorCode = GuiService:GetErrorCode()
+        if ErrorCode.Name ~= "OK" then
+            if Connections["DisconnectWatcher"] then
+                Connections["DisconnectWatcher"]:Disconnect()
+            end
+
+            DebugPrint(ErrorCode)
+            SendWebhook("Error", "Disconnected", {
+                { Name = "👤 Account",         Value = "||" .. Player.Name .. "||", Custom = true },
+                { Name = "ℹ️ Info",            Value = "Disconnect detected. Rejoin in progress." },
+                { Name = "❌ Error Code/Type", Value = tostring(ErrorCode) },
+            }, true)
+            Bus:Send("ShouldRejoin", "Yes")
+        end
+    end)
+
+    game.Close:Connect(function()
+        if Teleporting then return end
+        SendWebhook("Error", "Client Crashed", {
+            { Name = "👤 Account",         Value = "||" .. Player.Name .. "||", Custom = true },
+            { Name = "ℹ️ Info",            Value = "Client has crashed. Due to limited functionality, a rejoin cannot be made, so all other clients will be closed." },
+        }, true)
+        Bus:Send("ShouldShutdown", "Yes")
+    end)
+end
 
 task.spawn(function()
     if not IsMainAccount then return end
@@ -660,7 +664,7 @@ if TeleportData ~= nil then
 
             if Settings.Noclip then
                 task.spawn(function()
-                    RunService.Stepped:Connect(NoclipStep)
+                    RunService.RenderStepped:Connect(NoclipStep)
                     Player.CharacterAdded:Connect(function()
                         repeat task.wait() until
                             Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
