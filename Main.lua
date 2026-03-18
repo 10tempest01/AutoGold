@@ -1,3 +1,50 @@
+--[[--
+===========================================================================
+
+   █████╗ ██╗   ██╗████████╗ ██████╗  ██████╗  ██████╗ ██╗     ██████╗ 
+  ██╔══██╗██║   ██║╚══██╔══╝██╔═══██╗██╔════╝ ██╔═══██╗██║     ██╔══██╗
+  ███████║██║   ██║   ██║   ██║   ██║██║  ███╗██║   ██║██║     ██║  ██║
+  ██╔══██║██║   ██║   ██║   ██║   ██║██║   ██║██║   ██║██║     ██║  ██║
+  ██║  ██║╚██████╔╝   ██║   ╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
+  ╚═╝  ╚═╝ ╚═════╝    ╚═╝    ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝ 
+                                                                       
+  Author  : Tempest (@10.tempest.01)
+  Purpose : Automated gold skin farming across a configurable character
+            rotation. Supports dual-client communcation, Discord webhook
+            notifications, disconnect recovery, and per-character move
+            blacklists.
+
+===========================================================================
+
+  COPYRIGHT & LICENSE
+
+  Copyright (c) 2026 Tempest. All rights reserved.
+
+  This script is the intellectual property of Tempest. Redistribution,
+  re-upload, resale, or public sharing of this file — in whole or in part,
+  modified or unmodified — is strictly prohibited without prior written
+  permission from the author.
+
+  This software is provided for PERSONAL, NON-COMMERCIAL use only.
+  You may modify this file for your own private use, but you may not
+  distribute any derivative works.
+
+===========================================================================
+
+  DISCLAIMER
+
+  This script interacts with a third-party platform (Roblox). The author
+  makes no guarantees regarding its continued functionality, compatibility
+  with future game updates, or compliance with any platform's terms of
+  service. Use is entirely at your own risk.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM,
+  DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+
+===========================================================================
+--]]--
+
 -- Init
 local Settings = getgenv().Settings
 if not Settings then warn("Settings not found!") return end
@@ -10,10 +57,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local VirtualInput = game:GetService("VirtualInputManager")
-local VirtualUser = game:GetService("VirtualUser")
 local CoreGui = game:GetService("CoreGui")
 
 local Player = Players.LocalPlayer
@@ -381,8 +426,8 @@ if Settings.DisconnectDetection then
     game.Close:Connect(function()
         if Teleporting then return end
         SendWebhook("Error", "Client Crashed", {
-            { Name = "👤 Account",         Value = "||" .. Player.Name .. "||", Custom = true },
-            { Name = "ℹ️ Info",            Value = "Client has crashed. Due to limited functionality, a rejoin cannot be made, so all other clients will be closed." },
+            { Name = "👤 Account", Value = "||" .. Player.Name .. "||", Custom = true },
+            { Name = "ℹ️ Info",    Value = "Client has crashed. Due to limited functionality, a rejoin cannot be made, so all other clients will be closed." },
         }, true)
         Bus:Send("ShouldShutdown", "Yes")
     end)
@@ -684,7 +729,7 @@ if TeleportData ~= nil then
                             if not Target then return end
 
                             game:GetService("Workspace").CurrentCamera.CFrame = CFrame.new(
-                                game:GetService("Workspace").CurrentCamera.CFrame.Position,
+                                workspace.CurrentCamera.CFrame.Position,
                                 Target.HumanoidRootPart.Position
                             )
                         end)
